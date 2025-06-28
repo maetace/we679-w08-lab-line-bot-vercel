@@ -1,4 +1,4 @@
-// line-bot-vyw-gemini.js (วิว เวอร์ชันสมบูรณ์ Gemini 2.5 Flash)
+// line-bot-vyw-gemini.js (วิว เวอร์ชันปรับปรุง Gemini 1.5 Flash)
 
 const express = require("express");
 const { Client } = require("@line/bot-sdk");
@@ -16,10 +16,53 @@ const config = {
 const client = new Client(config);
 app.use(express.json());
 
+// --- Start of Improvement ---
+
+// 1. เพิ่ม Object สำหรับเก็บ Context ของผู้ใช้แต่ละคน
+//    เพื่อจดจำข้อความล่าสุดที่ผู้ใช้ส่งมาก่อนจะส่งรูปภาพ
+const userContext = {};
+
+// 2. ปรับปรุงฟังก์ชันเรียก Gemini API สำหรับรูปภาพ
+async function callGeminiVisionAPI(prompt, imageBase64) {
+  try {
+    // 2.1 เปลี่ยนไปใช้โมเดล gemini-1.5-flash-latest ซึ่งเหมาะกับงาน Vision มากขึ้น
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+    // 2.2 ปรับโครงสร้าง `contents` ให้ถูกต้องสำหรับการส่ง Text และ Image พร้อมกัน
+    const requestBody = {
+      contents: [{
+        parts: [
+          { text: prompt }, // ใส่ prompt ที่ได้รับจากผู้ใช้
+          {
+            inline_data: {
+              mime_type: "image/jpeg",
+              data: imageBase64,
+            },
+          },
+        ],
+      }],
+    };
+
+    const response = await axios.post(apiUrl, requestBody, {
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "อ๊ะ วิวยังวิเคราะห์ภาพนี้ไม่ได้เลย ลองใหม่นะคะ 😜";
+    return aiResponse;
+  } catch (error) {
+    console.error("Error calling Gemini Vision API:", error.response?.data || error.message);
+    return "วิวขอโทษนะคะ ตอนนี้ยังวิเคราะห์ภาพนี้ไม่ได้ ลองใหม่อีกทีนะคะ 💛";
+  }
+}
+
+// --- End of Improvement ---
+
+// ฟังก์ชันสำหรับเรียก API (ข้อความธรรมดา) ยังคงเดิม
 async function callGeminiAPI(userMessage) {
   try {
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      // ใช้โมเดล Flash ตัวล่าสุดเพื่อประสิทธิภาพที่ดี
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [{ parts: [{ text: userMessage }] }],
       },
@@ -33,25 +76,6 @@ async function callGeminiAPI(userMessage) {
   }
 }
 
-async function callGeminiAPIWithImage(imageBase64) {
-  try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        contents: [
-          { parts: [{ text: "วิวช่วยวิเคราะห์รูปนี้ให้หน่อยนะคะ 💛" }] },
-          { parts: [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }] },
-        ],
-      },
-      { headers: { "Content-Type": "application/json" } }
-    );
-    const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "อ๊ะ วิวยังวิเคราะห์ภาพนี้ไม่ได้เลย ลองใหม่นะคะ 😜";
-    return aiResponse;
-  } catch (error) {
-    console.error("Error calling Gemini API with image:", error);
-    return "วิวขอโทษนะคะ ตอนนี้ยังวิเคราะห์ภาพนี้ไม่ได้ ลองใหม่อีกทีนะคะ 💛";
-  }
-}
 
 async function getImageFromLine(messageId) {
   try {
@@ -72,17 +96,39 @@ app.post("/webhook", async (req, res) => {
   const events = req.body.events;
   for (const event of events) {
     if (event.type === "message") {
+      const userId = event.source.userId; // ดึง userId มาใช้เป็น key
+
       if (event.message.type === "text") {
         const userMessage = event.message.text;
+
+        // --- Improvement ---
+        // 3. จัดเก็บข้อความล่าสุดของผู้ใช้ลงใน context
+        userContext[userId] = {
+          text: userMessage,
+          timestamp: Date.now() // เก็บเวลาไว้ด้วย เผื่อต้องการลบ context ที่เก่าเกินไป
+        };
+
         const aiResponse = await callGeminiAPI(userMessage);
         await client.replyMessage(event.replyToken, { type: "text", text: aiResponse });
+
       } else if (event.message.type === "image") {
         const imageBase64 = await getImageFromLine(event.message.id);
         if (!imageBase64) {
           await client.replyMessage(event.replyToken, { type: "text", text: "อ๊ะ วิวยังโหลดรูปนี้ไม่ได้ ลองส่งใหม่อีกทีนะคะ 😜" });
           return;
         }
-        const aiResponse = await callGeminiAPIWithImage(imageBase64);
+
+        // --- Improvement ---
+        // 4. ตรวจสอบว่ามี context (คำถาม) จากผู้ใช้คนนี้หรือไม่
+        let prompt = "วิวช่วยวิเคราะห์รูปนี้ให้หน่อยนะคะ 💛"; // Default prompt
+        if (userContext[userId]) {
+          // ถ้ามี ให้ใช้ข้อความล่าสุดเป็น prompt
+          prompt = userContext[userId].text;
+          // หลังจากใช้แล้ว ให้ลบ context ทิ้งไปเลย เพื่อไม่ให้ใช้ซ้ำกับรูปถัดไป
+          delete userContext[userId];
+        }
+
+        const aiResponse = await callGeminiVisionAPI(prompt, imageBase64);
         await client.replyMessage(event.replyToken, { type: "text", text: aiResponse });
       }
     }
