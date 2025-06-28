@@ -1,4 +1,4 @@
-// line-bot-gemini-friendly.js (เวอร์ชันสมบูรณ์ Gemini 2.5 Flash)
+// line-bot-vyw-gemini.js (วิว เวอร์ชันสมบูรณ์ Gemini 2.5 Flash)
 
 const express = require("express");
 const { Client } = require("@line/bot-sdk");
@@ -25,11 +25,11 @@ async function callGeminiAPI(userMessage) {
       },
       { headers: { "Content-Type": "application/json" } }
     );
-    const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "อ๊ะ ฉันยังตอบเรื่องนี้ไม่ได้เลย ลองถามใหม่ได้นะคะ 💛";
+    const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "อ๊ะ วิวยังตอบเรื่องนี้ไม่ได้เลย ลองถามใหม่นะคะ 😜";
     return aiResponse;
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    return "อ๊ะ มีคนใช้เยอะเลยตอนนี้ ลองใหม่อีกทีนะคะ";
+    return "ขอโทษนะคะ ตอนนี้คนใช้เยอะ วิวงอแงนิดนึง ลองใหม่อีกทีนะคะ 💛";
   }
 }
 
@@ -39,17 +39,17 @@ async function callGeminiAPIWithImage(imageBase64) {
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [
-          { parts: [{ text: "ช่วยวิเคราะห์รูปนี้ให้หน่อยนะคะ 💛" }] },
+          { parts: [{ text: "วิวช่วยวิเคราะห์รูปนี้ให้หน่อยนะคะ 💛" }] },
           { parts: [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }] },
         ],
       },
       { headers: { "Content-Type": "application/json" } }
     );
-    const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "อ๊ะ ฉันยังวิเคราะห์ภาพนี้ไม่ได้เลย ลองใหม่อีกทีนะคะ";
+    const aiResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "อ๊ะ วิวยังวิเคราะห์ภาพนี้ไม่ได้เลย ลองใหม่นะคะ 😜";
     return aiResponse;
   } catch (error) {
     console.error("Error calling Gemini API with image:", error);
-    return "อ๊ะ ตอนนี้ฉันยังวิเคราะห์ภาพนี้ไม่ได้ ลองใหม่อีกทีนะคะ";
+    return "วิวขอโทษนะคะ ตอนนี้ยังวิเคราะห์ภาพนี้ไม่ได้ ลองใหม่อีกทีนะคะ 💛";
   }
 }
 
@@ -79,7 +79,7 @@ app.post("/webhook", async (req, res) => {
       } else if (event.message.type === "image") {
         const imageBase64 = await getImageFromLine(event.message.id);
         if (!imageBase64) {
-          await client.replyMessage(event.replyToken, { type: "text", text: "อ๊ะ ฉันโหลดรูปไม่ได้ ลองส่งใหม่อีกทีนะคะ" });
+          await client.replyMessage(event.replyToken, { type: "text", text: "อ๊ะ วิวยังโหลดรูปนี้ไม่ได้ ลองส่งใหม่อีกทีนะคะ 😜" });
           return;
         }
         const aiResponse = await callGeminiAPIWithImage(imageBase64);
@@ -91,7 +91,7 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("สวัสดีค่า 💛 บอทพร้อมใช้งานแล้วนะคะ!");
+  res.send("สวัสดีค่า วิวเองนะคะ 💛 บอทพร้อมช่วยตอบแล้วค่ะ ถามได้เลยน้า~");
 });
 
 module.exports = app;
